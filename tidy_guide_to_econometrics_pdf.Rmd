@@ -1,0 +1,569 @@
+---
+title: "Quick and Tidy Guide to Econometrics"
+author: "Ryan Safner"
+date: "Fall 2019"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+    toc_depth: 3
+
+mainfont: Fira Sans Condensed
+monofont: Fira Code
+mathfont: Fira Sans Condensed
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
+```
+
+\clearpage
+
+# Overview
+
+This is a quick guide to using `R` for basic econometrics and data analysis tasks (i.e. manipulating data, running regressions, and making plots and tables) in an *opinionated* way, using the `tidyverse` packages and grammar. Use this as document a shortcut or cheatsheet to refer to the packages, commands, and syntax necessary to perform these tasks.
+
+It is wise to always **load tidyverse**^[With `library(tidyverse)`.] at the beginning of each R session or markdown document, as most of the guide makes use of packages and commands that are *assumed* to already be loaded with tidyverse.
+
+```{r}
+library(tidyverse)
+```
+
+Throughout this guide, I use an `example_data.csv` file for data. To see how I made this data with `R`, see the Appendix. 
+
+\clearpage 
+
+# Summary Cheatsheet
+
+### General Tips
+
+- Make an R Project to organize files
+- Always start with `library(tidyverse)`
+- Never `View()` or `install.packages()` in a `.Rmd` file
+
+### Data Import
+
+`df<-read_*("file.*")`
+
+### Data Wrangling
+
+| Command | Does | Example |
+|---------|------|---------|
+| `select()` | Keep desired columns (variables) | `gapminder %>% select(pop)` |
+| `filter()` | Keep desired rows (observations) | `gapminder %>% filter(country=="France")` |
+| `arrange()` | Reorder rows (e.g. in numerical order) | `gapminder %>% arrange(pop)` |
+| `mutate()` | Create new variables | `gapminder %>% mutate(GDP = gdpPerCap * pop)` |
+| `summarize()` | Collapse data into summary statistics|  `gapminder %>% summarize(avg_GDP = mean(gdpPerCap))` |
+| `group_by()` | Perform any of the above functions by groups/categories | `gapminder %>% group_by(country) %>% summarize(avg_LE = mean(LifeExp))` |
+
+### Regressions
+
+`reg<-lm(y~x+z, data = df)`
+
+- Extensions:
+  - Polynomial: `I(var_name^2)`
+  - Log: `log(var_name)`
+  - Dummy/Fixed Effects (if not already a `factor` or dummy): `factor(category_var)`
+  - Interaction: `var_1:var_2`
+- Viewing:
+  - `summary(reg)` for full output
+  - `broom::tidy(reg)` to view coefficients in tidy tibble
+  - `broom::glance(reg)` to view regression statistics in tidy tibble
+  - `broom::augment(reg)` to add regression-based observations (i.e. $\hat{u_i}$, $\hat{Y_i})$
+- Making Regression Tables:
+  - `huxtable::huxreg(reg)`
+
+### Plotting
+
+```{r, eval = F}
+ggplot(data = df)+ # layer defining dataframe for data source
+  # aesthetics layer to map variables to aesthetics
+  aes(x = X,
+      y = Y,
+      color = shape)+ # will color by shape
+  # geometries layer(s)
+  geom_point()+ 
+  geom_smooth(method = "lm") # add a regression line
+```
+
+\clearpage
+
+
+# R Basics
+
+- `R` is "object-oriented":
+  - *Assign* values in objects: `my_object<-my_values`
+  - *Overwrite* objects: `my_object<-my_new_values`
+  - *Run functions* on objects: `function_name(my_object)`
+
+- Data types:
+  - `numeric` ("`double`" or "`integer`") data are numbers
+    - can use for math and statistics
+  - `character`: strings of text
+    - values must always be `"in quotes"`
+  - `factor`: indicates membership in one of several possible categories or groups
+
+- Object types:
+  - `vector`: collection of objects
+    - create with `c()` function
+  - `data.frame` or `tibble`: each row is a vector of same data type^[Henceforth, with `tidyverse`, I refer to all `data.frame`s as `tibble`s]
+    - rows are observations
+    - columns are variables
+
+- Packages:
+  - *Install* any package with `install.packages("package_name")
+    - Only necessary once, if package doesn't already exist
+  - *Load* a package for each session needed with `library("package_name")`
+  - *Description of packages we use*:
+
+| Package | Use |
+|---------|-----|
+| `tidyverse` | For tibbles (`tibble`), `%>%` operator (`magrittr`), data import (`readr`), data wrangling (`dplyr`), plotting (`ggplot2`)  |
+| `broom` | For tidy regression outputs |
+| `huxtable` | For making regression tables |
+| `car` | For regression tests (heteroskedasticity, outliers, F-test) |
+| `lmtest` | |
+| `estimatr` | For regression with heteroskedasticity-robust standard errors |
+
+\clearpage
+
+# Data Wrangling
+
+## Import
+
+- Import data with `read_*()` where the `*` represents the file extension (e.g. `csv`, `tsv`, `xls`, `xlsx`, `dta`)^[Loading `tidyverse` automatically loads the `readr` package, allowing you to load`csv` and `tsv` files without loading any package. Other file types require loading other packages, such as `readxl` (for Excel files) or `haven` or `foreign` (which are pretty good at reading any other type).] and inside the parentheses you place the location of the file on your computer or web URL in quotes
+- Be sure to assign your data to a tibble!
+
+```{r}
+#my_df<-read_csv("https://metricsf19.classes.ryansafner.com/data/example_data.csv")
+
+my_df<-read_csv("example_data.csv")
+
+```
+
+## Looking at Data
+
+- type the name of the tibble to print its contents
+- `str()` gives the structure of a tibble
+- `head()` prints the first few rows of a tibble
+- `View()` will open the tibble in a separate window for inspection^[*Do not run this command in a markdown document or it will not knit!*]
+- `glimpse()` gives the structure in a horizontal way
+
+```{r}
+my_df
+
+str(my_df)
+
+head(my_df)
+
+glimpse(my_df)
+```
+
+## General Data Manipulation
+
+The following table provides the major verbs for manipulating data. Further sections below provide examples for
+  i. *subsetting* data
+  ii. *transforming* data
+  iii. *summarizing* data
+
+| Verb (from `dplyr`) | Action |
+|---------------------|--------|
+| `select()` | Keep desired columns (variables) |
+| `filter()` | Keep desired rows (observations) |
+| `arrange()` | Reorder rows (e.g. in numerical order) |
+| `mutate()` | Create new variables | 
+| `summarize()` | Collapse data into summary statistics| 
+| `group_by()` | Perform any of the above functions by groups/categories |
+
+Most verbs allow you to manipulate data according to some **condition(s)**. Popular operators for performing conditional operations are listed in the table below:
+
+| Command | Effect |
+|---------|--------|
+| `<`; `>` | Less than; greater than |
+| `<=`; `>=` | Less than or equal to; greater than or equal to |
+| `==`; `!=` | Is equal to; is not equal to |
+| `%in%` | Is in the set of [a vector of options] |
+| `is.na()` | Is missing (`NA`) |
+
+Finally, for each command, you can alternatively:
+
+```{r, eval=F}
+# Just view the output
+my_df %>% verb()
+
+# Assign to a different object
+my_df_2<-my_df %>% verb()
+my_df_2 # then view the output
+
+# Assign to the original object (and overwrite it)
+my_df<-my_df %>% verb()
+my_df # then view the output
+```
+
+## Subset Data
+
+- To *subset* data and take only a portion of the data set by some condition(s) for various purposes, use 
+  - `select()` to subset by columns (variables)
+  - `filter()` to subset by rows (observations)
+
+```{r}
+# look only at data for "circles" AND where X>10
+my_df %>%
+  filter(Shape=="Circle",
+         X>10)
+```
+
+```{r}
+# look only at X and Y
+my_df %>%
+  select(X,Y)
+```
+
+## Transform Data
+
+- Data transformation uses the `mutate()` command to either
+  - create a new variable `mutate(new_name = conditions on existing variables)`
+  - change a variable (and overwrite it) `mutate(existing_variable = conditions on existing_variable)`
+
+```{r}
+# take the log of Y,
+# and the log of X,
+# and make new variable V, which is 0.5 times X times Z,
+# and change the class of Shape from to a character variable to a factor variable
+
+my_df<-my_df %>%
+  mutate(log_Y=log(Y),
+         log_X=log(X),
+         V = 0.5*(X*Z),
+         Shape = as.factor(Shape))
+my_df
+```
+
+## Summarize Data
+
+- Create summary statistics for datasets with `summarize()`. This will create a tibble of summary statistics.
+
+Below is a table of popular statistics-based commands for summarizing data. Except for the first two, place a variable inside each command, and optionally set it equal to a name for the statistic to be outputted.
+
+| Command | Does |
+|---------|------|
+| `n()` | Number of observations (nothing goes in parentheses!) |
+| `n_distinct()` | Number of unique observations (nothing goes in parentheses!) |
+| `sum()` | Sum all observations of a variable |
+| `mean()` | Average of all observations of a variable |
+| `median()` | 50<sup>th</sup> percentile of all observations of a variable |
+| `sd()`  | Standard deviation of all observations of a variable |
+| `min()` | Minimum value of a variable |
+| `max()` | Maximum value of a variable |
+| `quantile(x, 0.25)` | Specified percentile (example `25`<sup>th</sup> percentile) of a variable |
+| `first()` | First value of a variable |
+| `last()` | Last value of a variable |
+| `nth(x, 2)` | Specified position of a variable (example `2`<sup>nd</sup>) |
+
+```{r}
+# find number of obs, and mean and sd of X and Y
+my_df %>%
+  summarize(n(),
+            Mean_X = mean(X),
+            Std_dev_X = sd(X),
+            Mean_Y = mean(Y),
+            Std_dev_Y = sd(Y))
+```
+
+### Grouped-Summaries
+
+- You can run summary statistics by group by first using `group_by(categorical_variable)` and then `summarize()`:
+
+```{r}
+# get mean of X and Y for each Shape
+my_df %>%
+  group_by(Shape) %>%
+  summarize(mean_X = mean(X),
+            mean_Y = mean(Y))
+```
+
+### Categorical Data
+
+- For categorical data (`factors`), you can quickly produce a frequency table of each category with `count(factor_variable_name)`
+- `distinct()` shows the distinct values of a specified variable (often useful for finding the different categories)
+
+```{r}
+# count by shape
+my_df %>%
+  count(Shape)
+
+# get the distinct shapes
+my_df %>%
+  distinct(Shape)
+```
+
+### Correlation
+
+- You can quickly produce a correlation table (2+ variables) so long as they are `numeric` (i.e. not `character` or `factor`):
+
+```{r}
+my_df %>%
+  select(X,Y,Z) %>%
+  cor()
+```
+
+- A nice **correlogram** can be made with the `corrplot` package:
+
+```{r}
+library(corrplot)
+
+my_df %>%
+  select(X,Y,Z) %>%
+  cor() %>%
+  corrplot(.,
+           method = "circle", # choose circle, square, ellipse, number, pie, shade, color
+           type = "upper", # show only upper triangle of matrix
+           addCoef.col="white") # add white numbers
+```
+
+\clearpage
+
+# Regression
+
+The primary task in econometrics is running a regression on data. Regression uses the linear model `lm()` command where "Y" is regressed on all X variables, connected with `+`s, where the data is sourced from your tibble.
+
+```{r, eval=F}
+lm(Y~X+Z, data = my_df)
+```
+
+This will output the coefficients only. To get full information on coefficients, standard errors, hypothesis testing, and regression fit, pipe into the `summary()` command, or save the regression as an object and then run `summary()` on it. I show both methods below:
+
+```{r}
+my_df %>%
+  lm(data = ., # pipes my_data into the data = argument
+     Y~X+Z) %>%
+  summary()
+
+my_reg_1<-lm(Y~X+Z, data = my_df)
+summary(my_reg_1)
+```
+
+## Interpretation of Output
+
+- The top row `Residuals` describes the distribution of the residuals.
+- The `Coefficients` table describes the OLS parameters $\hat{\beta_j}$'s, where each row is a right-hand side variable, starting with `(Intercept)` $(\hat{\beta_0})$, then $(\hat{\beta_1})$, etc.
+  - `Estimate` column describes the OLS parameters $(\hat{\beta_0}, \hat{\beta_1}, \cdots)$
+  - `Std. Error` column describes the standard error of each parameter
+  - `t value` column describes the test statistic for a hypothesis test where $H_0:$ that particular $\hat{\beta_j}=0$
+  - `Pr(>|t|)` column is the $p$-value on that hypothesis test for that parameter (roughly, we're looking for it to be less than 0.05, if it is, there will be `*` stars to the right of it.
+- The bottomw three rows describes the goodness of fit of the regression
+  - `Residual standard error` is the Standard Error of the Regression $\sigma_u$
+  - `Multipled R-squared` is $R^2$, `Adjusted R-squared` is $\bar{R}^2$
+  - `F-statistic` is the F-statistic on an *All F-test* (all betas are equal to 0), and associated `p-value` on that test
+
+## Tidying Output with Broom
+
+- The `broom` package allows us to output regressions into tidy tibbles that we can easily print, work with, and extract individual parameters or statistics from for further analysis
+
+| Command | Does |
+|---------|------|
+| `tidy()` | Takes the saved `reg_object` and makes a tibble of the coefficients table only |
+| `augment()` | Create dataset with calculated values (e.g. `.fitted`, `.resid`) |
+| `glance()` | Get statistics of regression fit (e.g. `r.squared`, `sigma`) |
+
+```{r}
+# load broom
+library(broom)
+
+# tidy to get coefficients in a tidy tibble
+my_reg_1_tidy<-tidy(my_reg_1)
+my_reg_1_tidy
+
+# glance (original lm object) to view statistics
+glance(my_reg_1)
+
+# "r.squared" and "adj.r.squared" are self-explanatory
+# "sigma" is the Standard Error of the Regression (SER)
+# "statistic" is the F-statistic on the All-F test
+# "p.value" is the p-value from that All-F test
+
+my_reg_1_aug<-augment(my_reg_1)
+my_reg_1_aug
+
+# ".fitted" are predicted (Y-hat) values from the model
+# ".resid" are the residuals (u-hat) for each X-value
+```
+
+- `augment` is particularly useful for plotting fitted or residual values, as in a residual plot, where you can set `aes(y = .resid)`. 
+
+## Extensions
+
+### Categorical Data: Dummy Variables
+
+For categorical data, you can run a regression with a dummy variable if that variable takes on the values of 0 or 1.
+
+If the variable has multiple possible categories, you can use (or make) a dummy variable for *each* of the $n$ categories and include all $n-1$ dummy variables in the regression (to avoid the dummy variable trap!).
+
+If your variable exists as a `factor` variable (e.g. the value of each observation for that variable is the name of the category), you can simply add that variable in the regression and R will automatically create a dummy for each category and include $n-1$ dummies in a regression:
+
+```{r}
+# run a regression with Shape, a factor variable 
+## which has "Circle," "Triangle," and "Square" for categories
+
+shape_reg<-lm(Y~Shape, data = my_df)
+summary(shape_reg)
+
+# Note R made two dummies: 
+# # ShapeTriangle for Triangle (0 or 1)
+# # ShapeSquare for Square (0 or 1)
+# # and left out Circle as the reference category
+```
+
+**Interpretation**:
+
+- $\hat{\beta_0}$ is the average value of `Y` for the reference category
+  - e.g. `Circle`s have an average `Y` of 19.63
+- Each $\hat{\beta}$ is the *difference* between that category and the reference category
+  - e.g. `Triangle` has an average `Y` that is 4.66 larger than `Circle`
+  - e.g. `Square` has an average `Y` that is 0.15 larger than `Circle`
+
+### Interaction Terms
+
+To interact two variables in a regression and create an interaction term, simply add them to the regression with `:` or `*` between them.
+
+```{r}
+interact_reg<-lm(Y~X+Z+X:Z, data = my_df)
+summary(interact_reg)
+```
+
+### Polynomial Models
+
+To run a polynomial regression, simply add a higher order variable, which you can first `mutate()`, or use the `I()` command to create a quadratic (or higher order) term in your regression: 
+
+```{r}
+reg_quad<-lm(Y~X+I(X^2), data = my_df)
+summary(reg_quad)
+```
+
+### Logarithmic Models
+
+To run a regression with a logged variable, you can first `mutate()` the logged variable, or use the `log()` command to create a logged variable in your regression: 
+
+```{r}
+reg_log_log<-lm(log(Y)~log(X), data = my_df)
+summary(reg_log_log)
+```
+
+## Regression Output Tables
+
+There are several methods to make regression output tables, but I have found best use with the `huxtable` package's `huxreg()` command. There are three parts to the command (each separated by commas):
+
+1. Add your regression `lm` objects, separated by commas.
+  - Optionally define a `"column name" = your_lm_object` for each.
+2. Optionally rename and omit your X-variables as desired inside `coefs = c()`
+  - To change a variable's name down each row, set `"desired name" = var_name`. 
+  - Any X-variable not listed inside `coefs = c()` will be omitted from the table!
+3. Optionally rename and omit statistics as desired inside `stats = c()`
+  - To change a variable's name down each row, set `"desired name" = stat_name`. 
+  - Any statistics not listed inside `stats = c()` will be omitted from the table!
+
+```{r}
+# default example
+library(huxtable)
+my_reg_1 %>% huxreg()
+```
+
+```{r}
+# heavily customized
+library(huxtable)
+huxreg(my_reg_1,
+       shape_reg,
+       interact_reg,
+       reg_quad,
+       reg_log_log,
+       coefs = c("Constant" = "(Intercept)",
+                 "X" = "X",
+                 "Z" = "Z",
+                 "Square" = "ShapeSquare",
+                 "Triangle" = "ShapeTriangle",
+                 "X:Z", "X:Z",
+                 "$X^2$" = "I(X^2)",
+                 "ln(X)" = "log(X)"),
+       statistics = c("N" = "nobs",
+                      "$R^2$" = "r.squared",
+                      "SER" = "sigma"),
+       note = NULL, # suppress footnote for stars, to insert Fixed Effects Row below
+       number_format = 3) %>% # round to three decimals
+  
+  # Adding a lot of custom parts to table below
+  
+  add_rows(c("Fixed Effects", "None", "Shape", "None", "None", "None"), # add fixed effects row
+         after = 17) %>% # insert after 17th row
+  
+  # allow math to render as R^2 and X^2
+  set_escape_contents(c(14,20), c(1,1), FALSE) %>% # R^2 is rows 14 and 20, column 1
+  
+  # add centered "Y" in second row
+  insert_row(c("",rep("Y",4)),"ln(Y)", after = 1) %>%
+  merge_cells(c(2,2,2), 2:5) %>%
+  
+  # create borders
+  set_all_borders(0) %>% # remove all borders to manually set my own
+  set_top_border(1, 1:6, 2) %>% # add border size 2 to first row, columns 1:6
+  set_top_border(2, 1:6, 1) %>% # add border size 1 to second row, columns 1:6
+  set_top_border(3, 2:5, 1) %>% # add border size 1 to second row, columns 2:5
+  set_top_border(19, 2:6, 1) %>% # add border size 1 to second row, columns 2:5
+  set_bottom_border(22, 1:6, 2) %>% # add border size 2 to 22nd row, columns 1:6
+  
+  # caption the table
+  set_caption( "Regression Results")
+```
+
+\clearpage
+
+# Plots
+
+Plots of any kind can be made with `ggplot2`, which uses a "grammar of graphics" to build plots layer by layer. Some possible layers are described in the table below, *required* layers are boldened:
+
+| Command | Layer | Description |
+|---------|---------|-------------|
+| `data = ` | **Data** | Defines what tibble to use for the data |
+| `+aes()` | **Aesthetics** | Defines what variables from data will be mapped to markings |
+| `+geom_*()` | **Geometry** | Defines what markings to make, e.g. `point`, `histogram`, `line`, `smooth` (for regression lines) |
+| `+coord_*()` | Coordinates | Scales for axes |
+| `+scale_*()` | Scales | Define the range of values |
+| `+facet_*()` | Facets | Group into subplots
+
+### Histogram
+
+```{r}
+ggplot(data = my_df)+
+  aes(x = X)+
+  geom_histogram()
+```
+
+### Scatterplot (with Regression Line)
+
+```{r}
+ggplot(data = my_df)+
+  aes(x = X,
+      y = Y)+
+  geom_point()+
+  geom_smooth(method = "lm")
+```
+
+### Customized Example
+
+```{r}
+ggplot(data = my_df)+
+  aes(x = X,
+      y = Y)+
+  geom_point(aes(shape = Shape,
+                 color = Shape),
+             size = 2)+
+  geom_smooth(method = "lm",
+              aes(color = Shape))+
+  labs(x = "X",
+       y = "Y",
+       title = "An Example Plot")+
+  facet_wrap(~Shape)+
+  theme_bw()
+```
